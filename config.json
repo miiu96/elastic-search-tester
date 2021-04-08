@@ -1,5 +1,5 @@
 {
-  "elastic-url": "http://localhost:9200",
+  "elastic-url": "http://104.248.107.183",
   "user": "",
   "password": ""
 }

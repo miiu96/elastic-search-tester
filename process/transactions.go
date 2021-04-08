@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ElrondNetwork/elastic-indexer-go/data"
@@ -210,33 +211,50 @@ func (tp *transactionsProc) GetTransactionsByMBHash(mbHash string) ([]*data.Tran
 }
 
 func (tp *transactionsProc) ParseTransactions(txs []*data.Transaction) {
+	wg := &sync.WaitGroup{}
+	myChan := make(chan struct{}, 150)
+
+	log.Info("number of transactions", "num", len(txs))
 	for _, tx := range txs {
-		if tx.HasSCR == true {
-			scrs, err := tp.GetSCR(tx.Hash)
-			if err != nil {
-				log.Warn("cannot get smart contract results for tx", "hash", tx.Hash, "error", err)
-				continue
+		wg.Add(1)
+		go func(t *data.Transaction, w *sync.WaitGroup, m chan struct{}) {
+			defer func() {
+				w.Done()
+				<-m
+			}()
+
+			if t.HasSCR == true {
+				scrs, err := tp.GetSCR(t.Hash)
+				if err != nil {
+					log.Warn("cannot get smart contract results for tx", "hash", t.Hash, "error", err)
+					return
+				}
+				if len(scrs) == 0 {
+					log.Warn("transactions should have SCRS", "hash", t.Hash, "error", err)
+					return
+				}
+
+				return
 			}
-			if len(scrs) == 0 {
-				log.Warn("transactions should have SCRS", "hash", tx.Hash, "error", err)
-				continue
+
+			if t.Status == "invalid" {
+				_, err := tp.GetReceipt(t.Hash)
+				if err != nil {
+					log.Warn("cannot get receipt for tx", "hash", t.Hash, "error", err)
+					return
+				}
+
+				return
 			}
 
-			continue
-		}
-
-		if tx.Status == "invalid" {
-			_, err := tp.GetReceipt(tx.Hash)
-			if err != nil {
-				log.Warn("cannot get receipt for tx", "hash", tx.Hash, "error", err)
-				continue
+			if t.Status == "pending" {
+				log.Warn("pending transaction", "hash", t.Hash, "timestamp", time.Unix(int64(t.Timestamp), 0).Format(time.RFC822Z))
 			}
 
-			continue
-		}
+		}(tx, wg, myChan)
 
-		if tx.Status == "pending" {
-			log.Warn("pending transaction", "hash", tx.Hash, "timestamp", time.Unix(int64(tx.Timestamp), 0).Format(time.RFC822Z))
-		}
+		myChan <- struct{}{}
 	}
+
+	wg.Wait()
 }

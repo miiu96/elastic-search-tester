@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/ElrondNetwork/elastic-indexer-go/data"
 	"github.com/ElrondNetwork/elastic-search-tester/types"
@@ -42,12 +43,15 @@ func (bp *blocksProcessor) VerifyBlocksMiniblocksAndTransactions(shard string) {
 	}
 
 	latestNonce, err := bp.getHighestBlockNonce(shardID)
+	log.Warn("highest block nonce", "nonce", latestNonce)
 	if err != nil {
 		log.Warn("blocksProcessor.getHighestBlockNonce", "error", err)
 	}
 
 	for idx := uint64(0); idx < latestNonce; idx += step {
-		encodedQuery := types.Encode(blocksFromTo(shardID, 0, idx+step))
+		log.Info("verify blocks...", "from", idx, "to", idx+step)
+
+		encodedQuery := types.Encode(blocksFromTo(shardID, idx, idx+step))
 
 		response, errDo := bp.elasticClient.DoGetRequest(encodedQuery, blocksIndex, "nonce:asc")
 		if errDo != nil {
@@ -63,6 +67,7 @@ func (bp *blocksProcessor) VerifyBlocksMiniblocksAndTransactions(shard string) {
 
 		currentCheck := blocks[0].Nonce
 		for _, block := range blocks {
+			log.Info("block with", "nonce", block.Nonce, "number of miniblocks", len(block.MiniBlocksHashes))
 			if block.Nonce != currentCheck {
 				log.Warn(fmt.Sprintf("block with nonce %d is missing", currentCheck))
 			}
@@ -94,21 +99,38 @@ func (bp *blocksProcessor) getHighestBlockNonce(shardID uint32) (uint64, error) 
 }
 
 func (bp *blocksProcessor) getTransactionsByMBHashes(mbsHashes []string) {
+	wg := &sync.WaitGroup{}
+	wg.Add(len(mbsHashes))
 	for _, mbHash := range mbsHashes {
-		txs, err := bp.txsProc.GetTransactionsByMBHash(mbHash)
-		if err != nil {
-			log.Warn("blocksProcessor.GetTransactionsByMBHash", "error", err)
-		}
+		go func(mb string, w *sync.WaitGroup) {
+			txs, err := bp.txsProc.GetTransactionsByMBHash(mb)
+			if err != nil {
+				log.Warn("blocksProcessor.GetTransactionsByMBHash", "error", err)
+			}
 
-		bp.txsProc.ParseTransactions(txs)
+			bp.txsProc.ParseTransactions(txs)
+
+			w.Done()
+		}(mbHash, wg)
 	}
+
+	wg.Wait()
 }
 
 func (bp *blocksProcessor) checkMiniblocks(mbsHashes []string) {
+	wg := &sync.WaitGroup{}
+	wg.Add(len(mbsHashes))
+
 	for _, mbHash := range mbsHashes {
-		err := bp.checkMiniblock(mbHash)
-		log.LogIfError(err)
+		go func(mh string, w *sync.WaitGroup) {
+			err := bp.checkMiniblock(mh)
+			log.LogIfError(err)
+
+			w.Done()
+		}(mbHash, wg)
 	}
+
+	wg.Wait()
 }
 
 func (bp *blocksProcessor) checkMiniblock(mbHash string) error {
