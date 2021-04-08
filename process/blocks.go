@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	step = uint64(1000)
+	step                     = uint64(1000)
+	numberOfBlocksInParallel = 20
 )
 
 var (
@@ -65,21 +66,36 @@ func (bp *blocksProcessor) VerifyBlocksMiniblocksAndTransactions(shard string) {
 			continue
 		}
 
-		currentCheck := blocks[0].Nonce
-		for _, block := range blocks {
-			log.Info("block with", "nonce", block.Nonce, "number of miniblocks", len(block.MiniBlocksHashes))
-			if block.Nonce != currentCheck {
-				log.Warn(fmt.Sprintf("block with nonce %d is missing", currentCheck))
-			}
-			currentCheck++
-
-			if len(block.MiniBlocksHashes) == 0 {
-				continue
-			}
-			bp.checkMiniblocks(block.MiniBlocksHashes)
-			bp.getTransactionsByMBHashes(block.MiniBlocksHashes)
-		}
+		bp.verifyBlocks(blocks)
 	}
+}
+
+func (bp *blocksProcessor) verifyBlocks(blocks []*data.Block) {
+	wg := &sync.WaitGroup{}
+	myChan := make(chan struct{}, numberOfBlocksInParallel)
+
+	for _, block := range blocks {
+		wg.Add(1)
+		go func(b *data.Block, w *sync.WaitGroup, m chan struct{}) {
+			defer func() {
+				wg.Done()
+				<-m
+			}()
+
+			log.Info("block with", "nonce", b.Nonce, "number of miniblocks", len(b.MiniBlocksHashes))
+
+			if len(b.MiniBlocksHashes) == 0 {
+				return
+			}
+			bp.checkMiniblocks(b.MiniBlocksHashes)
+			bp.getTransactionsByMBHashes(b.MiniBlocksHashes)
+
+		}(block, wg, myChan)
+
+		myChan <- struct{}{}
+	}
+
+	wg.Wait()
 }
 
 func (bp *blocksProcessor) getHighestBlockNonce(shardID uint32) (uint64, error) {

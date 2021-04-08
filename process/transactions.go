@@ -20,6 +20,10 @@ var (
 	errCannotGetReceipt     = errors.New("cannot get receipts")
 )
 
+const (
+	numberOfTxsInParallel = 150
+)
+
 type transactionsProc struct {
 	elasticHandler ElasticHandler
 }
@@ -212,7 +216,7 @@ func (tp *transactionsProc) GetTransactionsByMBHash(mbHash string) ([]*data.Tran
 
 func (tp *transactionsProc) ParseTransactions(txs []*data.Transaction) {
 	wg := &sync.WaitGroup{}
-	myChan := make(chan struct{}, 150)
+	myChan := make(chan struct{}, numberOfTxsInParallel)
 
 	log.Info("number of transactions", "num", len(txs))
 	for _, tx := range txs {
