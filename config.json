@@ -1,5 +1,5 @@
 {
-  "elastic-url": "https://search-testing-mihai-cupm4ru4fsbpsgkikuqx6oexie.eu-central-1.es.amazonaws.com",
+  "elastic-url": "http://localhost:9200",
   "user": "",
   "password": ""
 }
