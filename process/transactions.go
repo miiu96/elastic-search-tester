@@ -74,6 +74,8 @@ func (tp *transactionsProc) GetTxResults(txHash string, tx *data.Transaction) {
 		for _, scr := range scrs {
 			prettyPrint(scr)
 		}
+
+		return
 	}
 	if tx.Status == "invalid" {
 		rec, err := tp.GetReceipt(txHash)
