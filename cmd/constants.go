@@ -20,7 +20,7 @@ var (
 	verifyBlocks = cli.StringFlag{
 		Name:  tester.VerifyAllBlockFromShard,
 		Usage: "Will verify all blocks from a given shard",
-		Value: "meta",
+		Value: "",
 	}
 )
 

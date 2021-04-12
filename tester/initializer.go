@@ -1,6 +1,8 @@
 package tester
 
 import (
+	"errors"
+
 	"github.com/ElrondNetwork/elastic-search-tester/client"
 	"github.com/ElrondNetwork/elastic-search-tester/config"
 	"github.com/ElrondNetwork/elastic-search-tester/process"
@@ -33,5 +35,5 @@ func RunElasticTester(ctx *cli.Context) error {
 		return nil
 	}
 
-	return nil
+	return errors.New("use a valid command")
 }

@@ -14,7 +14,7 @@ import (
 
 const (
 	step                     = uint64(1000)
-	numberOfBlocksInParallel = 20
+	numberOfBlocksInParallel = 50
 )
 
 var (
